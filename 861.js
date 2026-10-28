@@ -1477,21 +1477,56 @@
               .catch(() => {});
           } catch (e) {}
         }
+        // 定制：翻译结果缓存（相同文本 1 分钟内不重复请求）。
+        translationCache = new Map();
+        // 定制：进行中请求的合并表（相同文本共享一次请求）。
+        pendingTranslations = new Map();
+        getCachedTranslation(e) {
+          const t = this.translationCache.get(e);
+          if (!t) return;
+          if (Date.now() - t.time > 6e4) {
+            this.translationCache.delete(e);
+            return;
+          }
+          return t.value;
+        }
+        cacheTranslation(e, t) {
+          if (!e || void 0 === t) return;
+          this.translationCache.set(e, { value: t, time: Date.now() });
+          if (this.translationCache.size > 1e3) {
+            const n = Date.now();
+            for (const [e, t] of this.translationCache)
+              n - t.time > 6e4 && this.translationCache.delete(e);
+          }
+        }
         addStream(e) {
           const t = e.text.length;
-          t &&
-            (Ue.includes(this.apiCode)
-              ? (this.queue.push([e]), this.handleTask())
-              : (this.streamTextLength + t > 3e3 &&
-                  (this.queue.push(this.stream),
-                  (this.stream = []),
-                  (this.streamTextLength = 0),
-                  this.handleTask()),
-                this.stream.push(e),
-                (this.streamTextLength += t),
-                setTimeout(() => {
-                  this.handleTask();
-                }, 500)));
+          if (!t) return;
+          // 定制：命中缓存直接返回，不排队、不发起请求
+          const n = this.getCachedTranslation(e.text);
+          if (void 0 !== n) {
+            e.resolve(n);
+            return;
+          }
+          // 定制：相同文本已有请求在飞，合并等待，不再重复请求
+          const s = this.pendingTranslations.get(e.text);
+          if (s) {
+            s.push(e);
+            return;
+          }
+          this.pendingTranslations.set(e.text, [e]);
+          Ue.includes(this.apiCode)
+            ? (this.queue.push([e]), this.handleTask())
+            : (this.streamTextLength + t > 3e3 &&
+                (this.queue.push(this.stream),
+                (this.stream = []),
+                (this.streamTextLength = 0),
+                this.handleTask()),
+              this.stream.push(e),
+              (this.streamTextLength += t),
+              setTimeout(() => {
+                this.handleTask();
+              }, 500));
         }
         handleTask() {
           // 定制：只要在飞请求数未达上限，就继续取出批次并发发送。
@@ -1547,16 +1582,39 @@
                 r?.message &&
                   (r.message = `【${((o = this.apiCode), Be.v.find((e) => e.id === o)?.name)}】${r.message}`);
                 e.forEach((e, t) => {
-                  if (r) return void e.reject(r);
-                  if (!s) return void e.reject(new Error("没有翻译结果"));
+                  // 定制：取出等待同一文本的流，请求结束后一起唤醒
+                  const w = this.pendingTranslations.get(e.text);
+                  this.pendingTranslations.delete(e.text);
+                  if (r) {
+                    (w || []).forEach((x) => x !== e && x.reject(r));
+                    return void e.reject(r);
+                  }
+                  if (!s) {
+                    (w || []).forEach((x) => x !== e && x.reject(new Error("没有翻译结果")));
+                    return void e.reject(new Error("没有翻译结果"));
+                  }
                   const o = n[t],
                     i = o.end - o.start,
-                    a = s.slice(o.start, o.end);
-                  e.resolve(a.length === i ? a.join("\n") : null);
+                    a = s.slice(o.start, o.end),
+                    l = a.length === i ? a.join("\n") : null;
+                  // 定制：成功的译文写入缓存
+                  null !== l && this.cacheTranslation(e.text, l);
+                  (w || []).forEach(
+                    (x) =>
+                      x !== e &&
+                      (null !== l
+                        ? x.resolve(l)
+                        : x.reject(new Error("没有翻译结果"))),
+                  );
+                  e.resolve(l);
                 });
               },
               (t) => {
                 e.forEach((e) => {
+                  // 定制：请求失败时同样唤醒等待同一文本的流
+                  const n = this.pendingTranslations.get(e.text);
+                  this.pendingTranslations.delete(e.text);
+                  (n || []).forEach((x) => x !== e && x.reject(t));
                   e.reject(t);
                 });
               },
@@ -1953,7 +2011,7 @@
           if (!n && e.querySelector("svg")) return !0;
           if (n.length > 40) return !1;
           if (
-            /(^|\s)(material-icons(-outlined|-round|-sharp)?|material-symbols(-outlined|-rounded|-sharp)?|fa|fas|far|fab|glyphicon|anticon|el-icon|iconfont|icon)(\s|$)/i.test(
+            /(^|\s)(material-icons(-outlined|-round|-sharp)?|material-symbols(-outlined|-rounded|-sharp)?|fa|fas|far|fab|glyphicon|anticon|el-icon|iconfont|icon|sr-only|visually-hidden|screen-reader-text|a11y-hidden)(\s|$)/i.test(
               t,
             ) ||
             /\b(fa-\w+|glyphicon-\w+|bi-\w+|el-icon-\w+|anticon-\w+|icon-\w+)/i.test(t)
@@ -4262,7 +4320,7 @@
           if (!n && e.querySelector("svg")) return !0;
           if (n.length > 40) return !1;
           if (
-            /(^|\s)(material-icons(-outlined|-round|-sharp)?|material-symbols(-outlined|-rounded|-sharp)?|fa|fas|far|fab|glyphicon|anticon|el-icon|iconfont|icon)(\s|$)/i.test(
+            /(^|\s)(material-icons(-outlined|-round|-sharp)?|material-symbols(-outlined|-rounded|-sharp)?|fa|fas|far|fab|glyphicon|anticon|el-icon|iconfont|icon|sr-only|visually-hidden|screen-reader-text|a11y-hidden)(\s|$)/i.test(
               t,
             ) ||
             /\b(fa-\w+|glyphicon-\w+|bi-\w+|el-icon-\w+|anticon-\w+|icon-\w+)/i.test(
