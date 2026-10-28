@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>配置同步 - 划词翻译（定制版）</title>
+  <link rel="stylesheet" href="sync.css">
+</head>
+<body>
+  <main class="page">
+    <header class="page-header">
+      <div>
+        <h1>配置同步</h1>
+        <p class="subtitle">划词翻译定制版 · 以 GitHub 私有仓库保存配置</p>
+      </div>
+      <a class="back-link" href="settings.html" id="back-to-settings">返回设置</a>
+    </header>
+
+    <section class="card">
+      <h2>全文翻译并发</h2>
+      <p class="hint">全文翻译会把页面文本分批并发发送给翻译服务。并发越高速度越快，但可能触发翻译接口的限流；建议 4–8。</p>
+      <div class="row">
+        <label for="concurrency">并发数</label>
+        <input id="concurrency" type="number" min="1" max="16" step="1" value="8">
+        <button id="save-concurrency" class="btn primary">保存</button>
+        <span id="concurrency-status" class="status"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>GitHub 同步</h2>
+      <p class="hint">
+        需要一个 GitHub Personal Access Token（细粒度令牌，仅授予目标仓库的 <strong>Contents: Read and write</strong> 权限）。
+        出于安全考虑，<strong>只支持私有仓库</strong>：公开仓库会把你的配置历史暴露给所有人。
+      </p>
+      <div class="form">
+        <label>
+          <span>仓库（owner/repo）</span>
+          <input id="repo" type="text" placeholder="lianweimao/hcfy-config" autocomplete="off" spellcheck="false">
+        </label>
+        <label>
+          <span>分支（留空使用默认分支）</span>
+          <input id="branch" type="text" placeholder="main" autocomplete="off" spellcheck="false">
+        </label>
+        <label>
+          <span>文件路径</span>
+          <input id="path" type="text" placeholder="hcfy-config.json" autocomplete="off" spellcheck="false">
+        </label>
+        <label>
+          <span>Token（留空表示不修改）</span>
+          <input id="token" type="password" placeholder="github_pat_..." autocomplete="off" spellcheck="false">
+        </label>
+      </div>
+      <div class="row actions">
+        <button id="save-config" class="btn">保存设置</button>
+        <button id="test-connection" class="btn">测试连接</button>
+        <button id="upload" class="btn primary">上传到 GitHub</button>
+        <button id="download" class="btn primary">从 GitHub 下载</button>
+      </div>
+      <p id="sync-status" class="status block"></p>
+      <p id="sync-meta" class="meta"></p>
+    </section>
+
+    <section class="card">
+      <h2>本地备份</h2>
+      <p class="hint">导出的 JSON 不包含 GitHub Token，可以安全地备份到本地。</p>
+      <div class="row actions">
+        <button id="export" class="btn">导出配置</button>
+        <button id="import" class="btn">导入配置</button>
+        <input id="import-file" type="file" accept="application/json,.json" hidden>
+      </div>
+      <p id="backup-status" class="status block"></p>
+    </section>
+
+    <section class="card">
+      <h2>同步范围</h2>
+      <p class="hint">
+        同步 <code>chrome.storage.local</code> 中的全部配置项（翻译服务、快捷键、全文翻译样式等），
+        自动排除：GitHub Token、同步记录、全文翻译次数计数和扩展内部状态。
+        下载配置后，已打开的页面建议刷新一次；部分设置需要重新加载扩展才能完全生效。
+      </p>
+    </section>
+  </main>
+  <script src="sync-core.js"></script>
+  <script src="sync.js"></script>
+</body>
+</html>
