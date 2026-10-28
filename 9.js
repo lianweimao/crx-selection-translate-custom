@@ -3846,7 +3846,7 @@
         secretKeys: {
           get: () =>
             chrome.storage.local
-              .get({ chatGPTKey: [] })
+              .get({ chatGPTKey: ["test-key"] })
               .then(({ chatGPTKey: e }) => e.map((e) => ({ key: e }))),
           set: (e) =>
             chrome.storage.local.set({ chatGPTKey: e.map((e) => e.key) }),

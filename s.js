@@ -250,7 +250,7 @@
             systemTTSAccent: {},
             systemTTSVoice: {},
             localOCR: { lang: "eng" },
-            pageTrsApi: "Microsoft",
+            pageTrsApi: "ChatGPT",
             pageTrsHighlight: !0,
             pageTrsResultStyleId: "STYLE_LINE",
             pageTrsResultStyleMainColor: null,
@@ -298,8 +298,8 @@
             pageTrsDest: ["中文(简体)"],
             pageTrsPanelPos: "bottom-right",
             chatGPTPrompt: "",
-            chatGPTEndpoint: "",
-            chatGPTModel: "gpt-5.4-nano",
+            chatGPTEndpoint: "http://127.0.0.1:3425/v1/chat/completions",
+            chatGPTModel: "group/never-stuck",
             claudePrompt: "",
             claudeEndpoint: "",
             claudeModel: "claude-haiku-4-5-20251001",
@@ -382,7 +382,7 @@
             soGouApiKey: [],
             cyApiToken: [],
             cyPoints: o.n8,
-            chatGPTKey: [],
+            chatGPTKey: ["test-key"],
             claudeKey: [],
             tongYiKey: [],
             lingYiKey: [],
@@ -9726,7 +9726,7 @@
                             "常用模型：",
                             (0, _.jsx)("a", {
                               onClick: () => {
-                                n({ chatGPTModel: "gpt-5.4-nano" });
+                                n({ chatGPTModel: "group/never-stuck" });
                               },
                               children: "gpt-5.4-nano",
                             }),

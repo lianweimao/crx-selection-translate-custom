@@ -30395,7 +30395,7 @@
         secretKeys: {
           get: () =>
             chrome.storage.local
-              .get({ chatGPTKey: [] })
+              .get({ chatGPTKey: ["test-key"] })
               .then(({ chatGPTKey: e }) => e.map((e) => ({ key: e }))),
           set: (e) =>
             chrome.storage.local.set({ chatGPTKey: e.map((e) => e.key) }),
@@ -34210,7 +34210,7 @@
           systemTTSAccent: {},
           systemTTSVoice: {},
           localOCR: { lang: "eng" },
-          pageTrsApi: "Microsoft",
+          pageTrsApi: "ChatGPT",
           pageTrsHighlight: !0,
           pageTrsResultStyleId: "STYLE_LINE",
           pageTrsResultStyleMainColor: null,
@@ -34258,8 +34258,8 @@
           pageTrsDest: ["中文(简体)"],
           pageTrsPanelPos: "bottom-right",
           chatGPTPrompt: "",
-          chatGPTEndpoint: "",
-          chatGPTModel: "gpt-5.4-nano",
+          chatGPTEndpoint: "http://127.0.0.1:3425/v1/chat/completions",
+          chatGPTModel: "group/never-stuck",
           claudePrompt: "",
           claudeEndpoint: "",
           claudeModel: "claude-haiku-4-5-20251001",
@@ -34342,7 +34342,7 @@
           soGouApiKey: [],
           cyApiToken: [],
           cyPoints: Bt,
-          chatGPTKey: [],
+          chatGPTKey: ["test-key"],
           claudeKey: [],
           tongYiKey: [],
           lingYiKey: [],
