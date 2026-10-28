@@ -1753,10 +1753,10 @@
         let a = !1;
         const l = i.filter((e) => {
             if (e.nodeType === Node.TEXT_NODE) {
-              const t = !!e.nodeValue?.trim();
+              const t = !!e.nodeValue?.trim() && !isIconElement(e.parentElement);
               return (t && (a = !0), t);
             }
-            return e.nodeType === Node.ELEMENT_NODE && !isIconElement(e);
+            return e.nodeType === Node.ELEMENT_NODE;
           }),
           c = (e) => i.indexOf(l[e]);
         if (
@@ -1949,6 +1949,7 @@
               " " +
               (e.id || ""),
             n = (e.textContent || "").trim();
+          if (!n && e.querySelector("svg")) return !0;
           if (n.length > 40) return !1;
           if (
             /(^|\s)(material-icons(-outlined|-round|-sharp)?|material-symbols(-outlined|-rounded|-sharp)?|fa|fas|far|fab|glyphicon|anticon|el-icon|iconfont|icon)(\s|$)/i.test(
@@ -4241,6 +4242,40 @@
           e
         );
       })({});
+      // 定制：识别图标元素，避免 result 模式替换原文时把页面图标（SVG / 字体图标）一并删除
+      function isIconNode(e) {
+        if (!(e instanceof Element)) return !1;
+        try {
+          if (
+            "true" === e.getAttribute("aria-hidden") ||
+            "img" === e.getAttribute("role")
+          )
+            return !0;
+          const t = String(
+              (e.className && void 0 !== e.className.baseVal
+                ? e.className.baseVal
+                : e.className) || "",
+            ),
+            n = (e.textContent || "").trim();
+          if (!n && e.querySelector("svg")) return !0;
+          if (n.length > 40) return !1;
+          if (
+            /(^|\s)(material-icons(-outlined|-round|-sharp)?|material-symbols(-outlined|-rounded|-sharp)?|fa|fas|far|fab|glyphicon|anticon|el-icon|iconfont|icon)(\s|$)/i.test(
+              t,
+            ) ||
+            /\b(fa-\w+|glyphicon-\w+|bi-\w+|el-icon-\w+|anticon-\w+|icon-\w+)/i.test(
+              t,
+            )
+          )
+            return !0;
+          const s = getComputedStyle(e).fontFamily || "";
+          return /material\s*(icons|symbols)|font\s*awesome|glyphicon|iconfont|octicons|lucide|bootstrap-icons/i.test(
+            s,
+          );
+        } catch (t) {
+          return !1;
+        }
+      }
       class a {
         inited = !1;
         valid = !0;
@@ -4255,7 +4290,7 @@
         #t;
         constructor(e, t, n, r) {
           ((this.rootNode = e),
-            (this.sourceNodes = t),
+            (this.sourceNodes = t.filter((e) => !isIconNode(e))),
             (this.translateFn = n),
             (this.#e = new s.HT()),
             (this.#e.props.editable = null != r?.editable && r.editable),
@@ -4355,6 +4390,11 @@
                 ? (this.#e.props.mode = "plain")
                 : (this.#e.props.mode = "hide"),
             (this.#e.props.comparison.newLine = !this.inline),
+            (function (e, t) {
+              try {
+                e.style.whiteSpace = t ? "nowrap" : "";
+              } catch (e) {}
+            })(this.#e.container, this.inline && this.innerText.length <= 20),
             e && (this.#e.props.content = e),
             this.#e.render());
         }
