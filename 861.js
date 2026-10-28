@@ -4471,9 +4471,36 @@
             this.translate());
         }
         removeSourceNodes() {
-          const { rootNode: e, sourceNodes: t } = this;
+          const { rootNode: e, sourceNodes: t } = this,
+            c = this.#e.container;
           t.forEach((t) => {
             try {
+              // 定制：含图标的容器（如图标 + 文字的按钮）只移除文字、保留图标
+              if (
+                t instanceof Element &&
+                (t.querySelector("svg") || t.querySelector("img")) &&
+                t.textContent &&
+                t.textContent.trim()
+              ) {
+                const walker = document.createTreeWalker(t, NodeFilter.SHOW_TEXT),
+                  texts = [];
+                while (walker.nextNode()) {
+                  const n = walker.currentNode;
+                  n.nodeValue && n.nodeValue.trim() && texts.push(n);
+                }
+                const first = texts[0];
+                if (first && first.parentNode) {
+                  try {
+                    first.parentNode.insertBefore(c, first);
+                  } catch (e2) {}
+                  texts.forEach((n) => {
+                    try {
+                      n.parentNode.removeChild(n);
+                    } catch (e2) {}
+                  });
+                }
+                return;
+              }
               e.removeChild(t);
             } catch (e) {
               console.error("移除源节点失败：", e);
@@ -4483,6 +4510,9 @@
         appendSourceNodes() {
           const { rootNode: e } = this,
             t = this.#e.container;
+          try {
+            t.parentNode !== e && e.appendChild(t);
+          } catch (e2) {}
           this.sourceNodes.forEach((n) => {
             try {
               e.insertBefore(n, t);
