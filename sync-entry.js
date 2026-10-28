@@ -300,8 +300,24 @@
     if (hash.startsWith('#/fulltext') && !document.getElementById(CONCURRENCY_CARD_ID)) {
       main.appendChild(buildConcurrencyCard());
     }
-    if (hash.startsWith('#/user') && !document.getElementById(SYNC_CARD_ID)) {
-      main.appendChild(buildSyncCard());
+
+    if (hash.startsWith('#/user')) {
+      let card = document.getElementById(SYNC_CARD_ID);
+      if (!card) {
+        card = buildSyncCard();
+        main.appendChild(card);
+      }
+      // 「设置同步」页面只保留同步卡片，隐藏原有的登录 / 注册表单
+      for (const child of Array.from(main.children)) {
+        if (child !== card) child.style.display = 'none';
+      }
+    } else {
+      // 离开该页面时恢复被隐藏的节点
+      const card = document.getElementById(SYNC_CARD_ID);
+      if (card) card.remove();
+      for (const child of Array.from(main.children)) {
+        if (child.style.display === 'none') child.style.display = '';
+      }
     }
   }
 

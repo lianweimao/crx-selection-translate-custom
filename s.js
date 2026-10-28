@@ -1764,36 +1764,6 @@
                       rel: "noreferrer",
                     }),
                     (0, _.jsx)(b.c, {}),
-                    (0, _.jsx)(v.$, {
-                      icon: "refresh",
-                      text: "同步设置",
-                      onClick: () => {
-                        e(n);
-                      },
-                      style: { marginRight: "10px" },
-                    }),
-                    (0, _.jsxs)(Fe, {
-                      children: [
-                        (0, _.jsx)("p", {
-                          children:
-                            "开通会员后，划词翻译会在你每次更改设置后自动将设置上传到服务器。",
-                        }),
-                        (0, _.jsx)("div", {
-                          children:
-                            "另外，划词翻译会在后台每隔一小时检查设置是否有变更，你也可以点击“同步设置”按钮立刻进行一次检查。",
-                        }),
-                      ],
-                    }),
-                    (0, _.jsx)(b.c, {}),
-                    (0, _.jsx)(v.$, {
-                      icon: n ? ((0, Te.Rc)(n) ? "crown" : "user") : "log-in",
-                      minimal: !0,
-                      onClick: () => {
-                        t("/user");
-                      },
-                      rightIcon: n ? "caret-down" : void 0,
-                      text: n ? n.email : "登录",
-                    }),
                     (0, _.jsx)(Ne, {}),
                   ],
                 }),
@@ -1948,17 +1918,11 @@
                 children: (0, _.jsxs)(p.W, {
                   large: !0,
                   children: [
-                    (0, _.jsx)(g.D, {
-                      active: "/store" === s,
-                      icon: "shop",
-                      text: "商店",
-                      href: (0, c.$P)("/store"),
-                    }),
                     (0, _.jsx)(rn, { title: "我的" }),
                     (0, _.jsx)(g.D, {
                       active: "/user" === s,
                       icon: "user",
-                      text: t ? "个人中心" : "登录 / 注册",
+                      text: "设置同步",
                       href: (0, c.$P)("/user"),
                     }),
                     (0, _.jsx)(g.D, {
@@ -2048,19 +2012,6 @@
                       text: "PDF",
                     }),
                     (0, _.jsx)(rn, { title: "其它" }),
-                    (0, _.jsx)(g.D, {
-                      icon: "crown",
-                      text: "开通会员",
-                      onClick: () => {
-                        n("/store");
-                      },
-                    }),
-                    (0, _.jsx)(g.D, {
-                      icon: "clean",
-                      text: "邀请有礼",
-                      target: "_blank",
-                      href: "https://hcfy.ai/docs/invite",
-                    }),
                     (0, _.jsx)(g.D, {
                       active: "/about" === e.pathname,
                       href: (0, c.$P)("/about"),
