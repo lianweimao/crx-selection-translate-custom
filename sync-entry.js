@@ -281,6 +281,26 @@
 
   /* ---------- 路由与注入 ---------- */
 
+  const ALLOWED_SERVICES = ['谷歌翻译', 'ChatGPT'];
+  const hiddenServiceCards = new Set();
+
+  function hideExtraServices(main) {
+    for (const card of main.querySelectorAll('div.bp6-card')) {
+      const heading = card.querySelector(':scope > h4, :scope > h5, :scope > h6');
+      if (!heading) continue;
+      const name = heading.textContent.trim();
+      if (name && !ALLOWED_SERVICES.includes(name)) {
+        card.style.display = 'none';
+        hiddenServiceCards.add(card);
+      }
+    }
+  }
+
+  function restoreServices() {
+    for (const card of hiddenServiceCards) card.style.display = '';
+    hiddenServiceCards.clear();
+  }
+
   let scheduled = false;
 
   function scheduleInject() {
@@ -297,8 +317,19 @@
     if (!main) return;
     const hash = location.hash || '';
 
-    if (hash.startsWith('#/fulltext') && !document.getElementById(CONCURRENCY_CARD_ID)) {
-      main.appendChild(buildConcurrencyCard());
+    // 只在「网页全文翻译」页显示并发卡片，切到其他菜单时移除
+    const concurrencyCard = document.getElementById(CONCURRENCY_CARD_ID);
+    if (hash.startsWith('#/fulltext')) {
+      if (!concurrencyCard) main.appendChild(buildConcurrencyCard());
+    } else if (concurrencyCard) {
+      concurrencyCard.remove();
+    }
+
+    // 「第三方服务」/「服务申请」页面只保留谷歌翻译和 ChatGPT
+    if (hash.startsWith('#/services-options') || hash.startsWith('#/services')) {
+      hideExtraServices(main);
+    } else {
+      restoreServices();
     }
 
     if (hash.startsWith('#/user')) {

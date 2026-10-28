@@ -43,35 +43,7 @@
       }
       var d = a(10469);
       const h = ["划词翻译", "英语", "中文(简体)"],
-        m = [
-          {
-            id: "ALi",
-            name: "阿里翻译",
-            generateLink: t.O,
-            home: (0, t.O)(...h),
-          },
-          {
-            id: "QQ",
-            name: "腾讯翻译君",
-            generateLink: i.O,
-            home: (0, i.O)(...h),
-          },
-          { id: "SoGou", name: "搜狗翻译", generateLink: r, home: r(...h) },
-          { id: "BaiDu", name: "百度翻译", generateLink: u, home: u(...h) },
-          {
-            id: "YouDao",
-            name: "有道翻译",
-            generateLink: d.Z,
-            home: (0, d.Z)(...h),
-          },
-          {
-            id: "YouDaoDictionary",
-            name: "有道词典",
-            generateLink: c,
-            home: c(h[0], h[1]),
-          },
-          { id: "JinShan", name: "金山词霸", generateLink: n, home: n(h[0]) },
-        ];
+        m = [];
     },
     5270: (e, s, a) => {
       "use strict";
@@ -420,8 +392,8 @@
           u.g,
           o.m,
           m.l,
-        ],
-        O = R.filter((e) => e !== u.g);
+        ].filter((e) => "GoogleWeb" === e.id || "ChatGPT" === e.id),
+        O = R;
     },
     25148: (e, s, a) => {
       "use strict";

@@ -1756,7 +1756,7 @@
               const t = !!e.nodeValue?.trim();
               return (t && (a = !0), t);
             }
-            return e.nodeType === Node.ELEMENT_NODE;
+            return e.nodeType === Node.ELEMENT_NODE && !isIconElement(e);
           }),
           c = (e) => i.indexOf(l[e]);
         if (
@@ -1932,6 +1932,53 @@
           (e) => "hcfy-result" === e.nodeName.toLowerCase(),
         );
       }
+      // 定制：识别图标元素（字体图标 / SVG 图标容器），跳过其内部文本，
+      // 避免把图标名（如 material-icons 的 "settings"）翻译后导致图标丢失。
+      function isIconElement(e) {
+        try {
+          window.__hcfyIconCalls = (window.__hcfyIconCalls || 0) + 1;
+          if (
+            "true" === e.getAttribute("aria-hidden") ||
+            "img" === e.getAttribute("role")
+          )
+            return !0;
+          const t =
+              ((e.className && void 0 !== e.className.baseVal
+                ? e.className.baseVal
+                : e.className) || "") +
+              " " +
+              (e.id || ""),
+            n = (e.textContent || "").trim();
+          if (n.length > 40) return !1;
+          if (
+            /(^|\s)(material-icons(-outlined|-round|-sharp)?|material-symbols(-outlined|-rounded|-sharp)?|fa|fas|far|fab|glyphicon|anticon|el-icon|iconfont|icon)(\s|$)/i.test(
+              t,
+            ) ||
+            /\b(fa-\w+|glyphicon-\w+|bi-\w+|el-icon-\w+|anticon-\w+|icon-\w+)/i.test(t)
+          )
+            return (
+              (window.__hcfyIconHits = (window.__hcfyIconHits || 0) + 1),
+              !0
+            );
+          const s = getComputedStyle(e).fontFamily || "";
+          return /material\s*(icons|symbols)|font\s*awesome|glyphicon|iconfont|octicons|lucide|bootstrap-icons/i.test(
+            s,
+          );
+        } catch (t) {
+          return !1;
+        }
+      }
+      // 定制：判断元素是否处于单行（white-space: nowrap）布局中，
+      // 用于让译文保持内联，避免撑高单行区域或强制换行。
+      function isNowrapLayout(e) {
+        for (let t = 0; t < 3 && e; t += 1) {
+          try {
+            if ("nowrap" === getComputedStyle(e).whiteSpace) return !0;
+          } catch (e) {}
+          e = e.parentElement;
+        }
+        return !1;
+      }
       class dt {
         groups = new Map();
         mutationObserver = new MutationObserver((e) => {
@@ -2001,7 +2048,8 @@
                 e instanceof Element && this.intersectionObserver.observe(e));
               i.add(r, o).switchShowType(this.showType);
             },
-            (e) => "hcfy-result" === e.tagName.toLowerCase() || ct(e),
+            (e) =>
+              "hcfy-result" === e.tagName.toLowerCase() || ct(e) || isIconElement(e),
             (e) => {
               const n = t.get(e.element);
               n && n.setOnlyChild();
@@ -4279,7 +4327,17 @@
                     s = s.parentElement;
                   } while (s);
                   return null;
-                })(e, "a, button, [role=button], h1,h2,h3,h4,h5,h6")) &&
+                })(e, "a, button, [role=button], h1,h2,h3,h4,h5,h6") ||
+                (function (e) {
+                  for (let t = 0; t < 3 && e; t += 1) {
+                    try {
+                      if ("nowrap" === getComputedStyle(e).whiteSpace)
+                        return !0;
+                    } catch (e) {}
+                    e = e.parentElement;
+                  }
+                  return !1;
+                })(e)) &&
               ((this.inline = !0), this.inited && this.renderResult()));
         }
         destroy() {
