@@ -1748,22 +1748,6 @@
                 (0, _.jsxs)(y.y, {
                   align: "right",
                   children: [
-                    (0, _.jsx)(v.A, {
-                      icon: "git-repo",
-                      text: "更新日志",
-                      minimal: !0,
-                      href: "https://hcfy.ai/docs/log",
-                      target: "_blank",
-                      rel: "noreferrer",
-                    }),
-                    (0, _.jsx)(v.A, {
-                      icon: "issue",
-                      text: "反馈问题",
-                      href: "https://hcfy.ai/docs/issues",
-                      target: "_blank",
-                      rel: "noreferrer",
-                    }),
-                    (0, _.jsx)(b.c, {}),
                     (0, _.jsx)(Ne, {}),
                   ],
                 }),
@@ -2012,12 +1996,6 @@
                       text: "PDF",
                     }),
                     (0, _.jsx)(rn, { title: "其它" }),
-                    (0, _.jsx)(g.D, {
-                      active: "/about" === e.pathname,
-                      href: (0, c.$P)("/about"),
-                      icon: "info-sign",
-                      text: "关于",
-                    }),
                   ],
                 }),
               }),

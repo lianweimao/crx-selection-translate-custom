@@ -1936,6 +1936,7 @@
       // 避免把图标名（如 material-icons 的 "settings"）翻译后导致图标丢失。
       function isIconElement(e) {
         try {
+          if (e instanceof SVGElement) return !0;
           window.__hcfyIconCalls = (window.__hcfyIconCalls || 0) + 1;
           if (
             "true" === e.getAttribute("aria-hidden") ||
@@ -4246,6 +4247,7 @@
       function isIconNode(e) {
         if (!(e instanceof Element)) return !1;
         try {
+          if (e instanceof SVGElement) return !0;
           if (
             "true" === e.getAttribute("aria-hidden") ||
             "img" === e.getAttribute("role")

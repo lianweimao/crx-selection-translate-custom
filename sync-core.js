@@ -13,7 +13,10 @@
   const DEFAULT_PATH = 'hcfy-config.json';
   const DEFAULT_CONCURRENCY = 8;
   const CONFIG_FORMAT = 'hcfy-config';
-  const CONFIG_VERSION = 1;
+  const CONFIG_VERSION = 2;
+  const IDB_NAME = 'hcfy';
+  const FAVORITES_STORE = 'favorites';
+  const HISTORY_STORE = 'historyRecords';
 
   /** 这些键不参与同步：令牌、同步记录、额度计数与扩展内部状态。 */
   const EXCLUDED_KEYS = new Set([SYNC_CONFIG_KEY, SYNC_META_KEY, 'pageTranslateLimit']);
@@ -90,6 +93,61 @@
     }
     await chrome.storage.local.set({ pageTrsConcurrency: next });
     return next;
+  }
+
+  /* ---------- 收藏夹 / 历史记录（IndexedDB） ---------- */
+
+  function openDb() {
+    return new Promise((resolve, reject) => {
+      if (!indexedDB) return resolve(null);
+      const request = indexedDB.open(IDB_NAME);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+      request.onblocked = () => resolve(null);
+    });
+  }
+
+  function readStore(db, storeName) {
+    if (!db || !db.objectStoreNames.contains(storeName)) return Promise.resolve([]);
+    return new Promise((resolve, reject) => {
+      const request = db.transaction(storeName, 'readonly').objectStore(storeName).getAll();
+      request.onsuccess = () => resolve((request.result || []).filter((record) => !record.deleted));
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function mergeStore(db, storeName, records) {
+    if (!db || !db.objectStoreNames.contains(storeName) || !Array.isArray(records)) return 0;
+    const existing = await readStore(db, storeName);
+    const existingIds = new Set(existing.map((record) => record.id));
+    const toAdd = records.filter((record) => record && record.id && !existingIds.has(record.id));
+    if (!toAdd.length) return 0;
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(storeName, 'readwrite');
+      const store = tx.objectStore(storeName);
+      toAdd.forEach((record) => {
+        try {
+          store.put({ ...record, syncStatus: 'Pending' });
+        } catch (e) {}
+      });
+      tx.oncomplete = () => resolve(toAdd.length);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  }
+
+  async function readCollections() {
+    const db = await openDb();
+    if (!db) return { favorites: [], history: [] };
+    try {
+      const [favorites, history] = await Promise.all([
+        readStore(db, FAVORITES_STORE),
+        readStore(db, HISTORY_STORE),
+      ]);
+      return { favorites, history };
+    } finally {
+      db.close();
+    }
   }
 
   /* ---------- GitHub ---------- */
@@ -173,17 +231,20 @@
     }
   }
 
-  function buildPayload(storage) {
+  async function buildPayload(storage) {
     const data = {};
     for (const [key, value] of Object.entries(storage)) {
       if (!isExcludedKey(key)) data[key] = value;
     }
+    const { favorites, history } = await readCollections();
     return {
       format: CONFIG_FORMAT,
       version: CONFIG_VERSION,
       app: 'crx-selection-translate',
       exportedAt: new Date().toISOString(),
       data,
+      favorites,
+      history,
     };
   }
 
@@ -195,7 +256,11 @@
     for (const [key, value] of Object.entries(payload.data)) {
       if (!isExcludedKey(key)) data[key] = value;
     }
-    return data;
+    return {
+      data,
+      favorites: Array.isArray(payload.favorites) ? payload.favorites : [],
+      history: Array.isArray(payload.history) ? payload.history : [],
+    };
   }
 
   async function testConnection(config) {
@@ -212,7 +277,7 @@
   async function upload(config) {
     assertConfig(config);
     await checkRepository(config);
-    const payload = buildPayload(await readLocalConfig());
+    const payload = await buildPayload(await readLocalConfig());
     const text = JSON.stringify(payload, null, 2);
     const remote = await fetchRemoteFile(config);
     const body = {
@@ -240,7 +305,12 @@
         branch: config.branch,
       },
     });
-    return { count: Object.keys(payload.data).length, sha };
+    return {
+      count: Object.keys(payload.data).length,
+      favorites: payload.favorites.length,
+      history: payload.history.length,
+      sha,
+    };
   }
 
   async function download(config) {
@@ -255,8 +325,21 @@
     }
 
     const payload = JSON.parse(base64ToText(remote.content || ''));
-    const data = validatePayload(payload);
+    const { data, favorites, history } = validatePayload(payload);
     await chrome.storage.local.set(data);
+
+    let addedFavorites = 0;
+    let addedHistory = 0;
+    const db = await openDb();
+    if (db) {
+      try {
+        addedFavorites = await mergeStore(db, FAVORITES_STORE, favorites);
+        addedHistory = await mergeStore(db, HISTORY_STORE, history);
+      } finally {
+        db.close();
+      }
+    }
+
     await chrome.storage.local.set({
       [SYNC_META_KEY]: {
         sha: remote.sha,
@@ -267,11 +350,16 @@
         branch: config.branch,
       },
     });
-    return { count: Object.keys(data).length, sha: remote.sha };
+    return {
+      count: Object.keys(data).length,
+      addedFavorites,
+      addedHistory,
+      sha: remote.sha,
+    };
   }
 
   async function exportConfig() {
-    const payload = buildPayload(await readLocalConfig());
+    const payload = await buildPayload(await readLocalConfig());
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
@@ -284,9 +372,20 @@
 
   async function importConfig(file) {
     if (!file) return { count: 0 };
-    const data = validatePayload(JSON.parse(await file.text()));
+    const { data, favorites, history } = validatePayload(JSON.parse(await file.text()));
     await chrome.storage.local.set(data);
-    return { count: Object.keys(data).length };
+    let addedFavorites = 0;
+    let addedHistory = 0;
+    const db = await openDb();
+    if (db) {
+      try {
+        addedFavorites = await mergeStore(db, FAVORITES_STORE, favorites);
+        addedHistory = await mergeStore(db, HISTORY_STORE, history);
+      } finally {
+        db.close();
+      }
+    }
+    return { count: Object.keys(data).length, addedFavorites, addedHistory };
   }
 
   window.HcfySync = {
@@ -300,5 +399,6 @@
     download,
     exportConfig,
     importConfig,
+    readCollections,
   };
 })();

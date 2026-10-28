@@ -144,7 +144,7 @@
       make(
         'div',
         null,
-        '使用 GitHub Personal Access Token（细粒度令牌，仅授予目标仓库的 Contents 读写权限）在多台设备间同步配置。出于安全考虑只支持私有仓库：公开仓库会把配置历史暴露给所有人。',
+        '使用 GitHub Personal Access Token（仅授予目标仓库的 Contents 读写权限）在多台设备间同步设置项、收藏夹和历史记录。为安全起见只支持私有仓库。',
       ),
     );
     card.appendChild(callout);
@@ -234,7 +234,7 @@
           const result = await window.HcfySync.upload(await window.HcfySync.readConfig());
           setStatus(
             hint,
-            `上传成功，共同步 ${result.count} 项配置${result.sha ? `，版本 ${result.sha.slice(0, 8)}` : ''}。`,
+            `上传成功：${result.count} 项设置、${result.favorites} 条收藏、${result.history} 条历史${result.sha ? `，版本 ${result.sha.slice(0, 8)}` : ''}。`,
             true,
           );
           refreshMeta();
@@ -256,7 +256,7 @@
           } else {
             setStatus(
               hint,
-              `下载成功，已写入 ${result.count} 项配置。请刷新已打开的页面；部分设置需重新加载扩展后生效。`,
+              `下载成功：已写入 ${result.count} 项设置，新增 ${result.addedFavorites} 条收藏、${result.addedHistory} 条历史。请刷新已打开的页面；部分设置需重新加载扩展后生效。`,
               true,
             );
           }
@@ -301,6 +301,121 @@
     hiddenServiceCards.clear();
   }
 
+  /* ---------- 服务申请页：精简内容 ---------- */
+
+  const hiddenNodes = new Set();
+
+  function hideNode(node) {
+    if (!node) return;
+    node.style.display = 'none';
+    hiddenNodes.add(node);
+  }
+
+  function restoreHiddenNodes() {
+    for (const node of hiddenNodes) node.style.display = '';
+    hiddenNodes.clear();
+  }
+
+  function hideServicesExtras(main) {
+    // 移除「关于第三方服务」说明
+    for (const callout of main.querySelectorAll('.bp6-callout')) {
+      const heading = callout.querySelector('h3, h4, h5');
+      if (heading && /^关于第三方服务/.test(heading.textContent.trim())) hideNode(callout);
+    }
+    // 移除「图片转文字」「语音转文字」分组
+    for (const heading of main.querySelectorAll('h2')) {
+      if (/图片转文字|语音转文字/.test(heading.textContent.trim())) {
+        hideNode(heading.parentElement);
+      }
+    }
+    // 移除翻译服务中的谷歌翻译
+    for (const heading of main.querySelectorAll('h4')) {
+      if (heading.textContent.trim() === '谷歌翻译') {
+        hideNode(heading.closest('.bp6-card') || heading.parentElement);
+      }
+    }
+  }
+
+  /* ---------- 收藏夹 / 历史记录：接入 GitHub 同步 ---------- */
+
+  let cloudBar = null;
+
+  function buildCloudSyncBar(name) {
+    const bar = make('div', 'bp6-callout bp6-intent-primary');
+    bar.id = 'hcfy-cloud-sync-bar';
+    bar.style.marginBottom = '12px';
+
+    const row = make('div');
+    row.style.display = 'flex';
+    row.style.alignItems = 'center';
+    row.style.gap = '8px';
+    row.style.flexWrap = 'wrap';
+
+    const label = make('span', null, `${name}已纳入 GitHub 同步：`);
+    label.style.fontWeight = '600';
+    row.appendChild(label);
+
+    const uploadButton = button('上传到 GitHub', true);
+    const downloadButton = button('从 GitHub 下载', true);
+    const configButton = button('同步设置');
+    row.append(uploadButton, downloadButton, configButton);
+
+    const hint = make('span', 'bp6-text-small bp6-text-muted');
+    hint.style.marginLeft = '4px';
+    row.appendChild(hint);
+    bar.appendChild(row);
+
+    uploadButton.addEventListener('click', () => {
+      run(uploadButton, async () => {
+        try {
+          const result = await window.HcfySync.upload(await window.HcfySync.readConfig());
+          hint.textContent = `已上传（${result.favorites} 条收藏、${result.history} 条历史）。`;
+        } catch (error) {
+          hint.textContent = error.message;
+        }
+      });
+    });
+
+    downloadButton.addEventListener('click', () => {
+      run(downloadButton, async () => {
+        try {
+          const result = await window.HcfySync.download(await window.HcfySync.readConfig());
+          hint.textContent = result.unchanged
+            ? '远端没有新内容。'
+            : `已下载，新增 ${result.addedFavorites} 条收藏、${result.addedHistory} 条历史。`;
+        } catch (error) {
+          hint.textContent = error.message;
+        }
+      });
+    });
+
+    configButton.addEventListener('click', () => {
+      location.hash = '#/user';
+    });
+
+    return bar;
+  }
+
+  function handleCollectionsPage(main, hash) {
+    const isFavorites = hash.startsWith('#/stars');
+    const isHistory = hash.startsWith('#/history');
+    if (!isFavorites && !isHistory) {
+      if (cloudBar) {
+        cloudBar.remove();
+        cloudBar = null;
+      }
+      return;
+    }
+    // 隐藏官方的「同步到云端」入口：GitHub 是唯一同步方式
+    for (const link of main.querySelectorAll('a, button')) {
+      if (/同步到云端/.test(link.textContent || '')) hideNode(link);
+    }
+    if (!cloudBar) {
+      cloudBar = buildCloudSyncBar(isFavorites ? '收藏夹' : '历史记录');
+      main.insertBefore(cloudBar, main.firstChild);
+    }
+  }
+
   let scheduled = false;
 
   function scheduleInject() {
@@ -325,12 +440,22 @@
       concurrencyCard.remove();
     }
 
-    // 「第三方服务」/「服务申请」页面只保留谷歌翻译和 ChatGPT
-    if (hash.startsWith('#/services-options') || hash.startsWith('#/services')) {
+    // 「第三方服务」页面只保留谷歌翻译和 ChatGPT
+    if (hash.startsWith('#/services-options')) {
       hideExtraServices(main);
     } else {
       restoreServices();
     }
+
+    // 服务申请页：移除说明、图片/语音转文字与谷歌翻译
+    if (hash.startsWith('#/services') && !hash.startsWith('#/services-options')) {
+      hideServicesExtras(main);
+    } else {
+      restoreHiddenNodes();
+    }
+
+    // 收藏夹 / 历史记录：接入 GitHub 同步
+    handleCollectionsPage(main, hash);
 
     if (hash.startsWith('#/user')) {
       let card = document.getElementById(SYNC_CARD_ID);

@@ -68,7 +68,7 @@ async function handleUpload() {
   const result = await window.HcfySync.upload(await window.HcfySync.readConfig());
   setStatus(
     $('sync-status'),
-    `上传成功，共同步 ${result.count} 项配置${result.sha ? `，版本 ${result.sha.slice(0, 8)}` : ''}。`,
+    `上传成功：${result.count} 项设置、${result.favorites} 条收藏、${result.history} 条历史${result.sha ? `，版本 ${result.sha.slice(0, 8)}` : ''}。`,
     'success',
   );
   await loadForm();
@@ -82,7 +82,7 @@ async function handleDownload() {
     $('sync-status'),
     result.unchanged
       ? '远端版本与上次同步一致，没有新内容。'
-      : `下载成功，已写入 ${result.count} 项配置。请刷新已打开的页面；部分设置需重新加载扩展后生效。`,
+      : `下载成功：已写入 ${result.count} 项设置，新增 ${result.addedFavorites} 条收藏、${result.addedHistory} 条历史。请刷新已打开的页面；部分设置需重新加载扩展后生效。`,
     'success',
   );
   await loadForm();
