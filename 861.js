@@ -4476,12 +4476,7 @@
           t.forEach((t) => {
             try {
               // 定制：含图标的容器（如图标 + 文字的按钮）只移除文字、保留图标
-              if (
-                t instanceof Element &&
-                (t.querySelector("svg") || t.querySelector("img")) &&
-                t.textContent &&
-                t.textContent.trim()
-              ) {
+              if (t instanceof Element && (t.querySelector("svg") || t.querySelector("img"))) {
                 const walker = document.createTreeWalker(t, NodeFilter.SHOW_TEXT),
                   texts = [];
                 while (walker.nextNode()) {
