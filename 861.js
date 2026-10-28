@@ -4291,6 +4291,14 @@
         constructor(e, t, n, r) {
           ((this.rootNode = e),
             (this.sourceNodes = t.filter((e) => !isIconNode(e))),
+            (this.originLayout = (function (e) {
+              try {
+                const t = e.find((e) => e instanceof Element && e.textContent && e.textContent.trim());
+                if (!t) return;
+                const n = getComputedStyle(t);
+                return { column: n.gridColumn, row: n.gridRow, order: n.order };
+              } catch (e) {}
+            })(this.sourceNodes)),
             (this.translateFn = n),
             (this.#e = new s.HT()),
             (this.#e.props.editable = null != r?.editable && r.editable),
@@ -4396,6 +4404,14 @@
               } catch (e) {}
             })(this.#e.container, this.inline && this.innerText.length <= 20),
             e && (this.#e.props.content = e),
+            (function (e, t) {
+              try {
+                t &&
+                  ((e.style.gridColumn = t.column),
+                  (e.style.gridRow = t.row),
+                  t.order && "0" !== t.order && (e.style.order = t.order));
+              } catch (e) {}
+            })(this.#e.container, this.originLayout),
             this.#e.render());
         }
         async translate() {
