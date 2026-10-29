@@ -1454,7 +1454,7 @@
         We.VI.HunYuan,
         We.VI.SiliConflow,
       ];
-      // 定制：跨翻译会话共享的翻译缓存（1 分钟 TTL）。
+      // 定制：跨翻译会话共享的翻译缓存（24 小时 TTL）。
       // 注意：全文翻译每次都会 new 一个翻译器实例，缓存必须放在模块级才能跨会话复用。
       const globalTranslationCache = new Map();
       // 定制：跨翻译会话共享的「进行中请求」合并表。
@@ -1482,7 +1482,7 @@
               .catch(() => {});
           } catch (e) {}
         }
-        // 定制：翻译结果缓存（相同文本 1 分钟内不重复请求，跨翻译会话共享）。
+        // 定制：翻译结果缓存（相同文本 24 小时内不重复请求，跨翻译会话共享）。
         cacheKey(e) {
           const t = this.options || {},
             n = Array.isArray(t.dest) ? t.dest.join(",") : t.dest || "";
@@ -1507,24 +1507,6 @@
             const n = Date.now();
             for (const [e, t] of globalTranslationCache)
               n - t.time > 864e5 && globalTranslationCache.delete(e);
-          }
-        }
-        getCachedTranslation(e) {
-          const t = this.translationCache.get(e);
-          if (!t) return;
-          if (Date.now() - t.time > 864e5) {
-            this.translationCache.delete(e);
-            return;
-          }
-          return t.value;
-        }
-        cacheTranslation(e, t) {
-          if (!e || void 0 === t) return;
-          this.translationCache.set(e, { value: t, time: Date.now() });
-          if (this.translationCache.size > 1e3) {
-            const n = Date.now();
-            for (const [e, t] of this.translationCache)
-              n - t.time > 864e5 && this.translationCache.delete(e);
           }
         }
         addStream(e) {
@@ -1602,7 +1584,7 @@
                 let s;
                 if (t.result) s = t.result;
                 else {
-                  const e = t.dict?.[0].terms[0];
+                  const e = t.dict?.[0]?.terms?.[0];
                   e && (s = [e]);
                 }
                 const r = t.error;
