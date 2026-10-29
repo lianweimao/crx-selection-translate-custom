@@ -35503,6 +35503,59 @@
             ((t = e.noticesUnreadNum),
             chrome.action.setBadgeText({ text: t ? String(t) : "" }));
         }));
+      // 定制：翻译缓存（IndexedDB 持久化，24 小时内相同文本不重复翻译）
+      const __hcfyCacheTtl = 86400000;
+      let __hcfyCacheDb;
+      const __hcfyOpenCacheDb = () => {
+        if (!__hcfyCacheDb) {
+          __hcfyCacheDb = new Promise((resolve, reject) => {
+            const req = indexedDB.open("hcfyTranslateCache", 2);
+            req.onupgradeneeded = () => {
+              try {
+                req.result.objectStoreNames.contains("cache") || req.result.createObjectStore("cache", { keyPath: "key" });
+              } catch (e) {}
+            };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+          });
+        }
+        return __hcfyCacheDb;
+      };
+      async function __hcfyCacheGet(e) {
+        try {
+          const t = await __hcfyOpenCacheDb(),
+            n = await new Promise((resolve, reject) => {
+              const n = t.transaction("cache", "readonly").objectStore("cache").get(e);
+              n.onsuccess = () => resolve(n.result);
+              n.onerror = () => reject(n.error);
+            });
+          if (!n || Date.now() - n.time > __hcfyCacheTtl) return;
+          return n.value;
+        } catch (e) {}
+      }
+      async function __hcfyCachePut(e, t) {
+        try {
+          const n = await __hcfyOpenCacheDb();
+          await new Promise((resolve, reject) => {
+            const r = n.transaction("cache", "readwrite");
+            r.objectStore("cache").put({ key: e, value: t, time: Date.now() });
+            r.oncomplete = () => resolve();
+            r.onerror = () => reject(r.error);
+          });
+          if (Math.random() < 0.05) {
+            const r = n.transaction("cache", "readwrite"),
+              o = r.objectStore("cache"),
+              a = o.openCursor();
+            ((a.onsuccess = () => {
+              const e = a.result;
+              e &&
+                (Date.now() - e.value.time > __hcfyCacheTtl && e.delete(),
+                e.continue());
+            }),
+              (r.onerror = () => {}));
+          }
+        } catch (e) {}
+      }
       const fs = v()("background:messages"),
         ds = chrome.runtime.getURL("settings.html");
       !(function (e) {
@@ -35541,11 +35594,20 @@
                       : e.secondDestination;
                 n = e.destination === t ? [e.destination] : [e.destination, t];
               }
-              return t.translate({
+              // 定制：命中 IndexedDB 缓存则直接返回（24 小时内相同文本、源/目标语言、API 相同）
+              const __k =
+                e.apiCode + "\u0001" + (e.source || "") + "\u0001" + (Array.isArray(n) ? n.join(",") : n || "") + "\u0001" + e.text;
+              const __hit = await __hcfyCacheGet(__k);
+              if (void 0 !== __hit) {
+                return __hit;
+              }
+              const __r = await t.translate({
                 text: e.text,
                 destinations: n,
                 source: e.source,
               });
+              await __hcfyCachePut(__k, __r);
+              return __r;
             })(e.data);
           case "audio":
             return (async function (e) {
@@ -36485,4 +36547,185 @@
             }
         }));
     })());
+})();
+
+/**
+ * 版本检测（半自动更新）
+ *
+ * - 浏览器启动时、以及每 24 小时检查一次 GitHub 仓库的 manifest.json
+ * - 远端版本高于本地时：工具栏角标显示 NEW，并自动把仓库 zip 下载到下载目录
+ * - 设置页「设置同步」页面显示当前版本 / 最新版本，并提供手动检查与下载入口
+ *
+ * 说明：未打包扩展无法改写自身目录，因此最终仍需运行 update-extension.ps1
+ * （或手动解压覆盖）后在 edge://extensions 点「重新加载」。
+ */
+(() => {
+  const REPO = 'lianweimao/crx-selection-translate-custom';
+  const BRANCH = 'main';
+  const MANIFEST_URL = `https://raw.githubusercontent.com/${REPO}/${BRANCH}/manifest.json`;
+  const ZIP_URL = `https://codeload.github.com/${REPO}/zip/refs/heads/${BRANCH}`;
+  const ZIP_FILENAME = 'hcfy-update/crx-selection-translate-custom-main.zip';
+  const STATE_KEY = 'hcfyUpdateState';
+  const ALARM = 'hcfy-update-check';
+  const INTERVAL_MINUTES = 24 * 60;
+
+  const readState = async () => (await chrome.storage.local.get(STATE_KEY))[STATE_KEY] || {};
+
+  const saveState = async (patch) => {
+    const next = { ...(await readState()), ...patch };
+    await chrome.storage.local.set({ [STATE_KEY]: next });
+    return next;
+  };
+
+  const toParts = (version) =>
+    String(version || '')
+      .split('.')
+      .map((part) => parseInt(part, 10) || 0);
+
+  /** 返回 1 / 0 / -1 */
+  const compareVersions = (a, b) => {
+    const left = toParts(a);
+    const right = toParts(b);
+    const length = Math.max(left.length, right.length);
+    for (let i = 0; i < length; i += 1) {
+      const diff = (left[i] || 0) - (right[i] || 0);
+      if (diff) return diff > 0 ? 1 : -1;
+    }
+    return 0;
+  };
+
+  const swallow = (promise) => {
+    if (promise && typeof promise.catch === 'function') promise.catch(() => {});
+  };
+
+  const setBadge = (visible) => {
+    try {
+      swallow(chrome.action.setBadgeText({ text: visible ? 'NEW' : '' }));
+      if (visible) swallow(chrome.action.setBadgeBackgroundColor({ color: '#d97706' }));
+    } catch (error) {
+      /* 角标不可用不影响检测 */
+    }
+  };
+
+  async function downloadZip(latestVersion) {
+    try {
+      if (!chrome.downloads || !chrome.downloads.download) {
+        throw new Error('缺少 downloads 权限，请重新加载扩展');
+      }
+      const downloadId = await chrome.downloads.download({
+        url: ZIP_URL,
+        filename: ZIP_FILENAME,
+        conflictAction: 'overwrite',
+        saveAs: false,
+      });
+      await saveState({
+        downloadedVersion: latestVersion,
+        downloadedAt: Date.now(),
+        downloadId,
+        downloadError: '',
+      });
+    } catch (error) {
+      await saveState({ downloadError: String((error && error.message) || error) });
+    }
+  }
+
+  let running = null;
+
+  /** force 为 true 时忽略 24 小时节流 */
+  function check(force) {
+    if (running) return running;
+    running = (async () => {
+      const previous = await readState();
+      const now = Date.now();
+      if (!force && previous.checkedAt && now - previous.checkedAt < INTERVAL_MINUTES * 60000) {
+        // 未到检查时间：用缓存的最新版本重新判断（扩展更新后本地版本可能已变化），
+        // 同时恢复工具栏角标（badge 不跨浏览器会话保留）
+        if (!previous.latestVersion) {
+          setBadge(false);
+          return previous;
+        }
+        const localVersion = chrome.runtime.getManifest().version;
+        const hasUpdate = compareVersions(previous.latestVersion, localVersion) > 0;
+        setBadge(hasUpdate);
+        if (hasUpdate !== previous.hasUpdate || localVersion !== previous.localVersion) {
+          return saveState({ hasUpdate, localVersion });
+        }
+        return previous;
+      }
+
+      const localVersion = chrome.runtime.getManifest().version;
+      try {
+        const response = await fetch(`${MANIFEST_URL}?t=${now}`, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const remote = await response.json();
+        const latestVersion = String(remote.version || '').trim();
+        if (!latestVersion) throw new Error('远端 manifest.json 缺少 version 字段');
+
+        const hasUpdate = compareVersions(latestVersion, localVersion) > 0;
+        setBadge(hasUpdate);
+        await saveState({
+          checkedAt: now,
+          localVersion,
+          latestVersion,
+          hasUpdate,
+          error: '',
+          // 远端版本变化后允许重新下载；已是最新版本时清空下载记录
+          downloadedVersion: hasUpdate && previous.downloadedVersion === latestVersion ? latestVersion : null,
+        });
+
+        if (hasUpdate && previous.downloadedVersion !== latestVersion) {
+          await downloadZip(latestVersion);
+        }
+      } catch (error) {
+        await saveState({
+          checkedAt: now,
+          localVersion,
+          error: `检查更新失败：${(error && error.message) || error}`,
+        });
+      }
+      return readState();
+    })()
+      .catch(async (error) => ({
+        ...(await readState()),
+        error: `检查更新失败：${(error && error.message) || error}`,
+      }))
+      .finally(() => {
+        running = null;
+      });
+
+    return running;
+  }
+
+  function ensureAlarm() {
+    try {
+      chrome.alarms.get(ALARM, (alarm) => {
+        if (!alarm) {
+          chrome.alarms.create(ALARM, { delayInMinutes: 1, periodInMinutes: INTERVAL_MINUTES });
+        }
+      });
+    } catch (error) {
+      /* 忽略 */
+    }
+  }
+
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === ALARM) check(false);
+  });
+  chrome.runtime.onStartup.addListener(() => check(false));
+  chrome.runtime.onInstalled.addListener(() => check(false));
+
+  // 设置页（或其他扩展页面）请求检查
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (!message || message.type !== 'hcfy-update-check') return undefined;
+    check(Boolean(message.force))
+      .then((state) => sendResponse({ ok: true, state }))
+      .catch((error) => sendResponse({ ok: false, error: String((error && error.message) || error) }));
+    return true;
+  });
+
+  ensureAlarm();
+  check(false);
+
+  // 便于调试
+  globalThis.__hcfyUpdate = { check, compareVersions, ZIP_URL, MANIFEST_URL };
 })();

@@ -9,7 +9,11 @@
 (() => {
   const CONCURRENCY_CARD_ID = 'hcfy-concurrency-card';
   const SYNC_CARD_ID = 'hcfy-github-sync-card';
+  const VERSION_CARD_ID = 'hcfy-version-card';
   const SYNC_PAGE = chrome.runtime.getURL('sync.html');
+  const UPDATE_ZIP_URL =
+    'https://codeload.github.com/lianweimao/crx-selection-translate-custom/zip/refs/heads/main';
+  const UPDATE_REPO_URL = 'https://github.com/lianweimao/crx-selection-translate-custom';
 
   const make = (tag, className, text) => {
     const node = document.createElement(tag);
@@ -175,12 +179,6 @@
     meta.style.marginTop = '6px';
     card.appendChild(meta);
 
-    const link = make('a', null, '打开完整同步页面（本地备份 / 导入导出）');
-    link.href = SYNC_PAGE;
-    link.style.display = 'inline-block';
-    link.style.marginTop = '8px';
-    card.appendChild(link);
-
     const collect = () => ({
       repo: repo.value.trim(),
       branch: branch.value.trim(),
@@ -279,6 +277,117 @@
     return card;
   }
 
+  /* ---------- 版本更新卡片 ---------- */
+
+  function buildVersionCard() {
+    const card = make('div', 'bp6-card bp6-elevation-0');
+    card.id = VERSION_CARD_ID;
+    card.style.margin = '15px';
+
+    const heading = make('h5', 'bp6-heading', '版本更新');
+    heading.style.marginTop = '0';
+    card.appendChild(heading);
+
+    const summary = make('p', 'bp6-form-helper-text');
+    summary.style.marginTop = '0';
+    summary.textContent = `当前版本 v${chrome.runtime.getManifest().version}`;
+    card.appendChild(summary);
+
+    const state = make('p', 'bp6-form-helper-text');
+    state.style.minHeight = '18px';
+    card.appendChild(state);
+
+    const actions = make('div');
+    actions.style.display = 'flex';
+    actions.style.alignItems = 'center';
+    actions.style.gap = '8px';
+    actions.style.flexWrap = 'wrap';
+
+    const checkButton = button('检查更新', true);
+    actions.appendChild(checkButton);
+
+    const downloadLink = make('a', 'bp6-button', '下载最新版本');
+    downloadLink.href = UPDATE_ZIP_URL;
+    downloadLink.style.textDecoration = 'none';
+    downloadLink.style.marginRight = '0';
+    downloadLink.style.display = 'none';
+    actions.appendChild(downloadLink);
+
+    const repoLink = make('a', 'bp6-button', '打开仓库');
+    repoLink.href = UPDATE_REPO_URL;
+    repoLink.target = '_blank';
+    repoLink.rel = 'noreferrer';
+    repoLink.style.textDecoration = 'none';
+    repoLink.style.marginRight = '0';
+    actions.appendChild(repoLink);
+
+    card.appendChild(actions);
+
+    const guide = make('div', 'bp6-form-helper-text');
+    guide.style.marginTop = '10px';
+    guide.style.whiteSpace = 'pre-line';
+    guide.textContent =
+      '更新方式：检测到新版本后会自动把仓库压缩包下载到「下载/hcfy-update/」，运行项目中的 output/update-extension.ps1 自动覆盖扩展文件，然后在 edge://extensions 点击「重新加载」即可生效。';
+    card.appendChild(guide);
+
+    const render = (info) => {
+      const local = chrome.runtime.getManifest().version;
+      if (!info || !info.checkedAt) {
+        state.textContent = '尚未检查。';
+        state.style.color = '';
+        downloadLink.style.display = 'none';
+        return;
+      }
+      if (info.error) {
+        state.textContent = `${info.error}（本地 v${local}）`;
+        state.style.color = '#cf222e';
+        downloadLink.style.display = 'none';
+        return;
+      }
+      if (info.hasUpdate) {
+        state.textContent = `发现新版本 v${info.latestVersion}（本地 v${local}）。`;
+        state.style.color = '#cf222e';
+        downloadLink.style.display = '';
+        if (info.downloadedVersion === info.latestVersion) {
+          guide.textContent =
+            `最新版本已下载到「下载/hcfy-update/crx-selection-translate-custom-main.zip」。\n` +
+            '运行项目中的 output/update-extension.ps1 自动覆盖扩展文件，然后在 edge://extensions 点击「重新加载」。';
+        } else if (info.downloadError) {
+          state.textContent += ` 自动下载失败：${info.downloadError}，可点击「下载最新版本」手动下载。`;
+        }
+      } else {
+        state.textContent = `已是最新版本（本地 v${local}）。`;
+        state.style.color = '#1a7f37';
+        downloadLink.style.display = 'none';
+      }
+    };
+
+    const load = () => {
+      chrome.storage.local
+        .get('hcfyUpdateState')
+        .then((result) => render(result.hcfyUpdateState))
+        .catch(() => render(null));
+    };
+
+    checkButton.addEventListener('click', () => {
+      run(checkButton, async () => {
+        state.textContent = '正在检查……';
+        state.style.color = '';
+        try {
+          const response = await chrome.runtime.sendMessage({ type: 'hcfy-update-check', force: true });
+          if (!response || !response.ok) throw new Error((response && response.error) || '检查失败');
+          render(response.state);
+        } catch (error) {
+          state.textContent = `检查更新失败：${error.message}`;
+          state.style.color = '#cf222e';
+        }
+      });
+    });
+
+    load();
+    return card;
+  }
+
   /* ---------- 路由与注入 ---------- */
 
   const ALLOWED_SERVICES = ['谷歌翻译', 'ChatGPT'];
@@ -333,6 +442,32 @@
       if (heading.textContent.trim() === '谷歌翻译') {
         hideNode(heading.closest('.bp6-card') || heading.parentElement);
       }
+    }
+  }
+
+  /* ---------- 各页面精简 ---------- */
+
+  function hideSettingGroups(main, keywords) {
+    for (const group of main.querySelectorAll('.bp6-form-group')) {
+      const label = group.querySelector('.bp6-label, label');
+      const text = (label ? label.textContent : '').trim();
+      if (text && keywords.some((k) => text.includes(k))) hideNode(group);
+    }
+  }
+
+  function hideCardsByHeading(main, titles) {
+    for (const heading of main.querySelectorAll('h2, h3, h4, h5, h6')) {
+      if (!titles.some((t) => heading.textContent.trim() === t)) continue;
+      hideNode(heading.closest('.bp6-card') || heading.parentElement);
+    }
+  }
+
+  function hideNotice(main, pattern) {
+    for (const el of main.querySelectorAll('div, p')) {
+      const text = (el.textContent || '').trim();
+      if (!pattern.test(text) || text.length > 150 || el.children.length > 3) continue;
+      hideNode(el);
+      break;
     }
   }
 
@@ -421,10 +556,11 @@
   function scheduleInject() {
     if (scheduled) return;
     scheduled = true;
-    requestAnimationFrame(() => {
+    // 用 setTimeout 而不是 requestAnimationFrame：后台标签页会暂停 rAF
+    setTimeout(() => {
       scheduled = false;
       inject();
-    });
+    }, 50);
   }
 
   function inject() {
@@ -450,9 +586,36 @@
     // 服务申请页：移除说明、图片/语音转文字与谷歌翻译
     if (hash.startsWith('#/services') && !hash.startsWith('#/services-options')) {
       hideServicesExtras(main);
-    } else {
-      restoreHiddenNodes();
     }
+
+    // 其它页面：移除「自定义翻译源」整个功能
+    if (hash.startsWith('#/other')) hideCardsByHeading(main, ['自定义翻译源']);
+
+    // 翻译面板页面：移除专业版提示、显示顺序、跳转链接与下方三个界面区块
+    if (hash.startsWith('#/panel')) {
+      hideSettingGroups(main, ['显示顺序', '跳转链接']);
+      hideCardsByHeading(main, ['自定义界面', '网页划词面板', '独立翻译窗口']);
+      hideNotice(main, /选项已转移至通用/);
+    }
+
+    // 网页全文翻译页面：移除「突出显示译文」（连同其遗留的卡片，避免留下空白区域）
+    if (hash.startsWith('#/fulltext')) {
+      for (const group of main.querySelectorAll('.bp6-form-group')) {
+        const label = group.querySelector('.bp6-label, label');
+        const text = (label ? label.textContent : '').trim();
+        if (!text.includes('突出显示译文')) continue;
+        const card = group.closest('.bp6-card');
+        hideNode(card && (card.textContent || '').trim().length < 120 ? card : group);
+      }
+    }
+
+    // 离开精简页面时恢复被隐藏的节点
+    const slimPage =
+      (hash.startsWith('#/services') && !hash.startsWith('#/services-options')) ||
+      hash.startsWith('#/other') ||
+      hash.startsWith('#/panel') ||
+      hash.startsWith('#/fulltext');
+    if (!slimPage) restoreHiddenNodes();
 
     // 收藏夹 / 历史记录：接入 GitHub 同步
     handleCollectionsPage(main, hash);
@@ -463,14 +626,21 @@
         card = buildSyncCard();
         main.appendChild(card);
       }
-      // 「设置同步」页面只保留同步卡片，隐藏原有的登录 / 注册表单
+      let versionCard = document.getElementById(VERSION_CARD_ID);
+      if (!versionCard) {
+        versionCard = buildVersionCard();
+        main.appendChild(versionCard);
+      }
+      // 「设置同步」页面只保留同步与版本卡片，隐藏原有的登录 / 注册表单
       for (const child of Array.from(main.children)) {
-        if (child !== card) child.style.display = 'none';
+        if (child !== card && child !== versionCard) child.style.display = 'none';
       }
     } else {
       // 离开该页面时恢复被隐藏的节点
       const card = document.getElementById(SYNC_CARD_ID);
       if (card) card.remove();
+      const versionCard = document.getElementById(VERSION_CARD_ID);
+      if (versionCard) versionCard.remove();
       for (const child of Array.from(main.children)) {
         if (child.style.display === 'none') child.style.display = '';
       }

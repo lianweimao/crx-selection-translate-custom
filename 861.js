@@ -1454,6 +1454,11 @@
         We.VI.HunYuan,
         We.VI.SiliConflow,
       ];
+      // 定制：跨翻译会话共享的翻译缓存（1 分钟 TTL）。
+      // 注意：全文翻译每次都会 new 一个翻译器实例，缓存必须放在模块级才能跨会话复用。
+      const globalTranslationCache = new Map();
+      // 定制：跨翻译会话共享的「进行中请求」合并表。
+      const globalPendingTranslations = new Map();
       class Ve extends He.A {
         stream = [];
         streamTextLength = 0;
@@ -1477,14 +1482,37 @@
               .catch(() => {});
           } catch (e) {}
         }
-        // 定制：翻译结果缓存（相同文本 1 分钟内不重复请求）。
-        translationCache = new Map();
-        // 定制：进行中请求的合并表（相同文本共享一次请求）。
-        pendingTranslations = new Map();
+        // 定制：翻译结果缓存（相同文本 1 分钟内不重复请求，跨翻译会话共享）。
+        cacheKey(e) {
+          const t = this.options || {},
+            n = Array.isArray(t.dest) ? t.dest.join(",") : t.dest || "";
+          return `${this.apiCode}|${t.source || ""}|${n}|${e}`;
+        }
+        getCachedTranslation(e) {
+          const t = globalTranslationCache.get(this.cacheKey(e));
+          if (!t) return;
+          if (Date.now() - t.time > 864e5) {
+            globalTranslationCache.delete(this.cacheKey(e));
+            return;
+          }
+          return t.value;
+        }
+        cacheTranslation(e, t) {
+          if (!e || void 0 === t) return;
+          globalTranslationCache.set(this.cacheKey(e), {
+            value: t,
+            time: Date.now(),
+          });
+          if (globalTranslationCache.size > 1e3) {
+            const n = Date.now();
+            for (const [e, t] of globalTranslationCache)
+              n - t.time > 864e5 && globalTranslationCache.delete(e);
+          }
+        }
         getCachedTranslation(e) {
           const t = this.translationCache.get(e);
           if (!t) return;
-          if (Date.now() - t.time > 6e4) {
+          if (Date.now() - t.time > 864e5) {
             this.translationCache.delete(e);
             return;
           }
@@ -1496,7 +1524,7 @@
           if (this.translationCache.size > 1e3) {
             const n = Date.now();
             for (const [e, t] of this.translationCache)
-              n - t.time > 6e4 && this.translationCache.delete(e);
+              n - t.time > 864e5 && this.translationCache.delete(e);
           }
         }
         addStream(e) {
@@ -1509,12 +1537,12 @@
             return;
           }
           // 定制：相同文本已有请求在飞，合并等待，不再重复请求
-          const s = this.pendingTranslations.get(e.text);
+          const s = globalPendingTranslations.get(this.cacheKey(e.text));
           if (s) {
             s.push(e);
             return;
           }
-          this.pendingTranslations.set(e.text, [e]);
+          globalPendingTranslations.set(this.cacheKey(e.text), [e]);
           Ue.includes(this.apiCode)
             ? (this.queue.push([e]), this.handleTask())
             : (this.streamTextLength + t > 3e3 &&
@@ -1583,8 +1611,8 @@
                   (r.message = `【${((o = this.apiCode), Be.v.find((e) => e.id === o)?.name)}】${r.message}`);
                 e.forEach((e, t) => {
                   // 定制：取出等待同一文本的流，请求结束后一起唤醒
-                  const w = this.pendingTranslations.get(e.text);
-                  this.pendingTranslations.delete(e.text);
+                  const w = globalPendingTranslations.get(this.cacheKey(e.text));
+                  globalPendingTranslations.delete(this.cacheKey(e.text));
                   if (r) {
                     (w || []).forEach((x) => x !== e && x.reject(r));
                     return void e.reject(r);
@@ -1612,8 +1640,8 @@
               (t) => {
                 e.forEach((e) => {
                   // 定制：请求失败时同样唤醒等待同一文本的流
-                  const n = this.pendingTranslations.get(e.text);
-                  this.pendingTranslations.delete(e.text);
+                  const n = globalPendingTranslations.get(this.cacheKey(e.text));
+                  globalPendingTranslations.delete(this.cacheKey(e.text));
                   (n || []).forEach((x) => x !== e && x.reject(t));
                   e.reject(t);
                 });
@@ -1995,7 +2023,6 @@
       function isIconElement(e) {
         try {
           if (e instanceof SVGElement) return !0;
-          window.__hcfyIconCalls = (window.__hcfyIconCalls || 0) + 1;
           if (
             "true" === e.getAttribute("aria-hidden") ||
             "img" === e.getAttribute("role")
@@ -2016,10 +2043,7 @@
             ) ||
             /\b(fa-\w+|glyphicon-\w+|bi-\w+|el-icon-\w+|anticon-\w+|icon-\w+)/i.test(t)
           )
-            return (
-              (window.__hcfyIconHits = (window.__hcfyIconHits || 0) + 1),
-              !0
-            );
+            return !0;
           const s = getComputedStyle(e).fontFamily || "";
           return /material\s*(icons|symbols)|font\s*awesome|glyphicon|iconfont|octicons|lucide|bootstrap-icons/i.test(
             s,
